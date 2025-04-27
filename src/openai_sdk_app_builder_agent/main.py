@@ -1,46 +1,49 @@
-# main.py
+# src/openai_sdk_app_builder_agent/main.py
 
 import asyncio
-from dataclasses import dataclass
 import uuid
-from dotenv import load_dotenv
-import os
 from agents import Runner
-from agents.run import RunContextWrapper
 from openai_sdk_app_builder_agent.agents.app_builder_orchestrator_agent import orchestrator_agent
-
-# Load environment variables
-load_dotenv()
-
-# Read MAX_WORDS env variable, fallback to 100 if not set
-MAX_WORDS = int(os.getenv("MAX_WORDS", 100))
-
-# Define context (in this case, user input) as a dataclass
-@dataclass
-class UserInputContext:
-    rough_idea: str
-    uid: int
+from openai_sdk_app_builder_agent.context import AppBuilderContext
+from agents.items import MessageOutputItem
 
 async def main():
-    # Get user input (rough app idea)
-    user_input = input(f"Enter your rough app idea (Output limited to {MAX_WORDS} words): ")
+    # Step 1: Get rough idea from user
+    rough_idea = input("Enter your rough app idea: ")
+    user_id = f"user-{uuid.uuid4().hex[:8]}"
 
-    # Wrap the user input in a context object
-    user_id = str(uuid.uuid4())
-    user_input_context = UserInputContext(rough_idea=user_input,uid=user_id)
+    # Step 2: Initialize session
+    context = AppBuilderContext(user_id=user_id, rough_idea=rough_idea)
+    input_items = []  # This will store conversation history
 
-    # Create the RunContextWrapper with user input as context
-    context_wrapper = RunContextWrapper([user_input_context])
+    while True:
+        # Step 3: Run agent
+        result = await Runner.run(
+            starting_agent=orchestrator_agent,
+            input=input_items if input_items else rough_idea,
+            context=context
+        )
 
-    # Run the Root Agent with the context
-    result = await Runner.run(
-        starting_agent=orchestrator_agent,
-        input=user_input,  # Pass user input as input
-        context=context_wrapper  # Pass the context to keep the state
-    )
+        # Step 4: Append new items to input history
+        input_items = result.to_input_list()
 
-    # Print the final agent response
-    print(f"\nAgent Response (limited to {MAX_WORDS} words):\n", result.final_output)
+        # Step 5: Look at last output — decide if agent expects user input
+        last_item = None
+        for item in reversed(result.new_items):
+            if isinstance(item, MessageOutputItem):
+                last_item = item
+                break
 
-if __name__ == "__main__":
-    asyncio.run(main())
+        if last_item is None:
+            print("[Agent]: No message output from agent. Ending session.")
+            break
+
+        # Step 6: Show agent's output to user
+        agent_message = last_item.raw_item.content
+        print(f"\n[Agent]: {agent_message}\n")
+
+        # Step 7: Ask user for next input
+        user_response = input("[You]: ")
+        input_items.append({"role": "user", "content": user_response})
+
+asyncio.run(main())

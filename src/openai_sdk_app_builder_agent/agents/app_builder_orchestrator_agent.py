@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import os
 from agents import Agent 
 from openai_sdk_app_builder_agent.agents.clarifier_agent import clarifier_agent
+from openai_sdk_app_builder_agent.context import AppBuilderContext
 
 # Load environment variables
 load_dotenv()
@@ -12,7 +13,7 @@ load_dotenv()
 MAX_WORDS = int(os.getenv("MAX_WORDS", 100))
 
 # Root Agent that orchestrates the flow
-orchestrator_agent = Agent(
+orchestrator_agent = Agent[AppBuilderContext](
     name="App Builder Orchestrator Agent",
     instructions=(
         f"You help users build apps. If the idea is too vague, hand it off to the Clarifier Agent for more details. "
